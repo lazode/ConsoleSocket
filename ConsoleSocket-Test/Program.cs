@@ -22,23 +22,31 @@ namespace ConsoleSocket_Test
 
         static byte[] SendBytes = new byte[256];
         static byte[] RecBytes = new byte[256];
+        static byte[] TempBytes = new byte[256];
         static string ClientMSG = null;
 
         const string fileErrMSG = "Can not read file data now.";
         const string OKMSG = "Server is OK";
+        static bool flag = false;
 
         private static void ListenClientConnect()
         {
             while (true)
             {
-                clientSocket = server.Accept();
-                clientSocket.Send(Encoding.ASCII.GetBytes(OKMSG));
-                clientList.Add(clientSocket);
-                
-                if(clientSocket.Poll(-1, SelectMode.SelectRead) && (clientSocket.Receive(RecBytes) == 0))
+                lock (clientList)
                 {
+                    
+                    clientSocket = server.Accept();
+                    clientSocket.Send(Encoding.ASCII.GetBytes(OKMSG));
+                    clientList.Add(clientSocket);
 
-                    clientList.RemoveAt(clientList.Count - 1);
+                    if (clientSocket.Poll(-1, SelectMode.SelectRead))
+                    {
+                        if (clientSocket.Receive(TempBytes) == 0)
+
+                            clientList.RemoveAt(clientList.Count - 1);
+                    }
+
                 }
             }
         }
@@ -50,41 +58,53 @@ namespace ConsoleSocket_Test
             {
                 if(clientList.Any())
                 {
-                    foreach (Socket item in clientList)
+                    try
                     {
-                        
-                        if (item.Poll(10, SelectMode.SelectRead | SelectMode.SelectWrite))
+
+                        foreach (Socket item in clientList)
                         {
-                            if (item.Available > 0)
+
+                            if (item.Poll(10, SelectMode.SelectRead | SelectMode.SelectWrite))
                             {
-                                item.Receive(RecBytes, RecBytes.Length, SocketFlags.None);
-                                ClientMSG = Encoding.ASCII.GetString(RecBytes);
+                                if (item.Available > 0)
+                                {
+                                    item.Receive(RecBytes, RecBytes.Length, SocketFlags.None);
+                                    ClientMSG = Encoding.ASCII.GetString(RecBytes);
 
-                                Console.WriteLine("Message from client:");
-                                Console.WriteLine(ClientMSG);
+                                    Console.WriteLine("Message from client:");
+                                    Console.WriteLine(ClientMSG);
+                                }
+                                else if (!item.Connected) {
+                                    continue;
+                                }
+
+                                string fileData = File.ReadAllText(@"C:\Users\lz_home\Desktop\Test.txt", Encoding.ASCII);
+                                //int data = Convert.ToInt32(fileData);
+
+                                if (fileData == null)
+                                {
+                                    Console.WriteLine("No Data in file now...");
+                                    SendBytes = Encoding.ASCII.GetBytes(fileErrMSG);
+                                    item.Send(SendBytes, SendBytes.Length, SocketFlags.None);
+
+                                }
+                                else
+                                {
+                                    Console.WriteLine("The data in file is:");
+                                    Console.WriteLine(fileData);
+
+                                    SendBytes = Encoding.ASCII.GetBytes(fileData);
+                                    item.Send(SendBytes, SendBytes.Length, SocketFlags.None);
+
+                                }
                             }
-                             
-                            string fileData = File.ReadAllText(@"C:\Users\lz_home\Desktop\Test.txt", Encoding.ASCII);
-                            //int data = Convert.ToInt32(fileData);
-                            
-                            if (fileData == null)
-                            {
-                                Console.WriteLine("No Data in file now...");
-                                SendBytes = Encoding.ASCII.GetBytes(fileErrMSG);
-                                item.Send(SendBytes, SendBytes.Length, SocketFlags.None);
 
-                            }
-                            else
-                            {
-                                Console.WriteLine("The data in file is:");
-                                Console.WriteLine(fileData);
-
-                                SendBytes = Encoding.ASCII.GetBytes(fileData);
-                                item.Send(SendBytes, SendBytes.Length, SocketFlags.None);
-
-                            }
                         }
-                        
+                    }
+                    catch(InvalidOperationException InOE)
+                    {
+                        //Console.WriteLine(InOE.Message);
+                        continue;
                     }
                 }
                 else
