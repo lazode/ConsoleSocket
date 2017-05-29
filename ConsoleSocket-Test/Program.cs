@@ -28,9 +28,11 @@ namespace ConsoleSocket_Test
         const string fileErrMSG = "Can not read file data now.";
         const string OKMSG = "Server is OK";
         static bool flag = false;
+        static int clientCount = 0;
 
         private static void ListenClientConnect()
         {
+            
             while (true)
             {
                 lock (clientList)
@@ -39,13 +41,14 @@ namespace ConsoleSocket_Test
                     clientSocket = server.Accept();
                     clientSocket.Send(Encoding.ASCII.GetBytes(OKMSG));
                     clientList.Add(clientSocket);
-
+                    
                     if (clientSocket.Poll(-1, SelectMode.SelectRead))
                     {
-                        if (clientSocket.Receive(TempBytes) == 0)
+                        if (!clientSocket.Connected)
 
                             clientList.RemoveAt(clientList.Count - 1);
                     }
+
 
                 }
             }
@@ -56,60 +59,88 @@ namespace ConsoleSocket_Test
         {
             while(true)
             {
-                if(clientList.Any())
+                if (clientCount != clientList.Count)
                 {
-                    try
-                    {
-
-                        foreach (Socket item in clientList)
-                        {
-
-                            if (item.Poll(10, SelectMode.SelectRead | SelectMode.SelectWrite))
-                            {
-                                if (item.Available > 0)
-                                {
-                                    item.Receive(RecBytes, RecBytes.Length, SocketFlags.None);
-                                    ClientMSG = Encoding.ASCII.GetString(RecBytes);
-
-                                    Console.WriteLine("Message from client:");
-                                    Console.WriteLine(ClientMSG);
-                                }
-                                else if (!item.Connected) {
-                                    continue;
-                                }
-
-                                string fileData = File.ReadAllText(@"C:\Users\lz_home\Desktop\Test.txt", Encoding.ASCII);
-                                //int data = Convert.ToInt32(fileData);
-
-                                if (fileData == null)
-                                {
-                                    Console.WriteLine("No Data in file now...");
-                                    SendBytes = Encoding.ASCII.GetBytes(fileErrMSG);
-                                    item.Send(SendBytes, SendBytes.Length, SocketFlags.None);
-
-                                }
-                                else
-                                {
-                                    Console.WriteLine("The data in file is:");
-                                    Console.WriteLine(fileData);
-
-                                    SendBytes = Encoding.ASCII.GetBytes(fileData);
-                                    item.Send(SendBytes, SendBytes.Length, SocketFlags.None);
-
-                                }
-                            }
-
-                        }
-                    }
-                    catch(InvalidOperationException InOE)
-                    {
-                        //Console.WriteLine(InOE.Message);
-                        continue;
-                    }
+                    flag = true;
+                    clientCount = clientList.Count;
                 }
                 else
                 {
-                    Console.WriteLine("No client connecting now...");
+                    flag = false;
+                }
+
+                if (flag)
+                {
+                    if (clientList.Any())
+                    {
+
+                        try
+                        {
+
+                            foreach (Socket item in clientList)
+                            {
+
+                                if (item.Poll(10, SelectMode.SelectRead | SelectMode.SelectWrite))
+                                {
+                                    if (item.Available > 0)
+                                    {
+                                        item.Receive(RecBytes, RecBytes.Length, SocketFlags.None);
+                                        ClientMSG = Encoding.ASCII.GetString(RecBytes);
+
+                                        Console.WriteLine("Message from client:");
+                                        Console.WriteLine(ClientMSG);
+                                    }
+                                    else if (!item.Connected)
+                                    {
+                                        
+                                        continue;
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("The client from " + item.RemoteEndPoint + "connected this server");
+
+                                        string fileData = File.ReadAllText(@"C:\Users\lz_home\Desktop\Test.txt", Encoding.ASCII);
+                                        //int data = Convert.ToInt32(fileData);
+
+                                        if (fileData == null)
+                                        {
+                                            Console.WriteLine("No Data in file now...");
+                                            SendBytes = Encoding.ASCII.GetBytes(fileErrMSG);
+                                            item.Send(SendBytes, SendBytes.Length, SocketFlags.None);
+
+                                        }
+                                        else
+                                        {
+                                            Console.WriteLine("The data in file is:");
+                                            Console.WriteLine(fileData);
+
+                                            SendBytes = Encoding.ASCII.GetBytes(fileData);
+
+                                            if (item.Connected)
+                                                item.Send(SendBytes, SendBytes.Length, SocketFlags.None);
+
+                                        }
+                                    }
+                                }
+
+                            }
+                        }
+                        catch (InvalidOperationException InOE)
+                        {
+                            //Console.WriteLine(InOE.Message);
+                            continue;
+                        }
+                        catch(SocketException SocketE)
+                        {
+                            Console.WriteLine(SocketE.Message);
+                            continue;
+                        }
+
+                    }
+                    else
+                    {
+                        Console.WriteLine("No client connecting now...");
+                    }
                 }
             }
         }
@@ -119,7 +150,7 @@ namespace ConsoleSocket_Test
             
             try
             {
-
+                
                 IPAddress localAddr = IPAddress.Parse(localIP);
                 IPEndPoint localEndPoint = new IPEndPoint(localAddr, localPort);
 
